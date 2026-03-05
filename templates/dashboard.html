@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Scraper</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-dark bg-dark">
+        <div class="container-fluid">
+            <span class="navbar-brand">🕷️ Web Scraper</span>
+            <div>
+                <span class="text-light me-3">Welcome <strong id="username"></strong></span>
+                <a href="/logout" class="btn btn-sm btn-danger">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container py-5">
+        <div class="row">
+            <div class="col-md-8 offset-md-2">
+                <div class="card shadow">
+                    <div class="card-body">
+                        <h2 class="mb-4">Enter Website URL</h2>
+                        <form id="form">
+                            <div class="mb-3">
+                                <input class="form-control form-control-lg" id="url" placeholder="https://example.com" required>
+                            </div>
+                            <div id="msg" class="alert d-none"></div>
+                            <button type="submit" class="btn btn-primary btn-lg w-100 mb-3">
+                                <span id="btnText">Start Scraping</span>
+                                <span id="spinner" class="spinner-border spinner-border-sm ms-2 d-none"></span>
+                            </button>
+                        </form>
+
+                        <!-- Progress -->
+                        <div id="progress" class="progress d-none mb-3">
+                            <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%"></div>
+                        </div>
+
+                        <!-- Results -->
+                        <div id="results" class="d-none mt-4">
+                            <h3>Results</h3>
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <div class="card bg-primary text-white">
+                                        <div class="card-body text-center">
+                                            <h4 id="linkCount">0</h4>
+                                            <small>Links</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="card bg-success text-white">
+                                        <div class="card-body text-center">
+                                            <h4 id="imgCount">0</h4>
+                                            <small>Images</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="card bg-info text-white">
+                                        <div class="card-body text-center">
+                                            <h4 id="title">-</h4>
+                                            <small>Page Title</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button type="button" class="btn btn-success mb-3" id="downloadBtn">
+                                📥 Download CSV
+                            </button>
+
+                            <ul class="nav nav-tabs" role="tablist">
+                                <li class="nav-item">
+                                    <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#links">Links</button>
+                                </li>
+                                <li class="nav-item">
+                                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#images">Images</button>
+                                </li>
+                                <li class="nav-item">
+                                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#text">Text</button>
+                                </li>
+                            </ul>
+
+                            <div class="tab-content">
+                                <div id="links" class="tab-pane fade show active p-3">
+                                    <div id="linksList"></div>
+                                </div>
+                                <div id="images" class="tab-pane fade p-3">
+                                    <div id="imagesList" class="row"></div>
+                                </div>
+                                <div id="text" class="tab-pane fade p-3">
+                                    <div id="textContent"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentFilename = null;
+
+        // Set username
+        document.getElementById('username').textContent = '{{ username }}';
+
+        document.getElementById('form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const url = document.getElementById('url').value;
+            const msg = document.getElementById('msg');
+            const btn = e.target.querySelector('button');
+            const spinner = document.getElementById('spinner');
+            const progress = document.getElementById('progress');
+
+            msg.classList.add('d-none');
+            btn.disabled = true;
+            spinner.classList.remove('d-none');
+            progress.classList.remove('d-none');
+
+            try {
+                const res = await fetch('/api/scrape', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({url})
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    showResults(data);
+                    msg.textContent = '✅ Scraping successful!';
+                    msg.className = 'alert alert-success';
+                    currentFilename = data.filename;
+                } else {
+                    msg.textContent = data.error || data.message || 'Failed';
+                    msg.className = 'alert alert-danger';
+                }
+                msg.classList.remove('d-none');
+            } catch (e) {
+                msg.textContent = 'Error: ' + e.message;
+                msg.className = 'alert alert-danger';
+                msg.classList.remove('d-none');
+            } finally {
+                btn.disabled = false;
+                spinner.classList.add('d-none');
+                progress.classList.add('d-none');
+            }
+        });
+
+        function showResults(data) {
+            document.getElementById('title').textContent = (data.title || 'Unknown').substring(0, 20);
+            document.getElementById('linkCount').textContent = data.links_count || 0;
+            document.getElementById('imgCount').textContent = data.images_count || 0;
+
+            // Links
+            const linksList = document.getElementById('linksList');
+            linksList.innerHTML = '';
+            if (data.links && data.links.length > 0) {
+                data.links.forEach(link => {
+                    const a = document.createElement('a');
+                    a.href = link.url;
+                    a.target = '_blank';
+                    a.className = 'list-group-item list-group-item-action';
+                    a.innerHTML = `<strong>${link.text || 'Link'}</strong><br><small class="text-muted">${link.url}</small>`;
+                    linksList.appendChild(a);
+                });
+            } else {
+                linksList.innerHTML = '<p class="text-muted">No links found</p>';
+            }
+
+            // Images
+            const imagesList = document.getElementById('imagesList');
+            imagesList.innerHTML = '';
+            if (data.images && data.images.length > 0) {
+                data.images.forEach(img => {
+                    const col = document.createElement('div');
+                    col.className = 'col-md-4 mb-3';
+                    col.innerHTML = `
+                        <div class="card">
+                            <img src="${img.src}" class="card-img-top" style="height: 150px; object-fit: cover;" alt="${img.alt}">
+                            <div class="card-body">
+                                <small>${img.alt || 'No caption'}</small>
+                            </div>
+                        </div>
+                    `;
+                    imagesList.appendChild(col);
+                });
+            } else {
+                imagesList.innerHTML = '<p class="text-muted">No images found</p>';
+            }
+
+            // Text
+            document.getElementById('textContent').textContent = data.text_sample || 'No text found';
+
+            document.getElementById('results').classList.remove('d-none');
+        }
+
+        document.getElementById('downloadBtn').addEventListener('click', () => {
+            if (currentFilename) {
+                window.location = `/api/download/${currentFilename}`;
+            }
+        });
+    </script>
+</body>
+</html>
